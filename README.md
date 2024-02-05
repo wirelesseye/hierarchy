@@ -3,60 +3,94 @@ Add OOP class hierarchy to Rust.
 ## Example
 
 ```rust
+// animal.rs
 use hierarchy::class;
 
-class!(ClassA {
-    let one: i32;
+class!(pub Animal {
+    let name: String;
 
-    pub final fn new(one: i32) -> ClassA {
-        ClassA { one }
-    }
-    
-    pub fn print_name(&self) -> () {
-        println!("ClassA")
-    }
-});
-
-class!(ClassB extends ClassA {
-    let two: i32;
-
-    pub final fn new(one: i32, two: i32) -> ClassB {
-        ClassB { class_a: ClassA::new(one), two }
-    }
-});
-
-class!(ClassC extends ClassB < ClassA {
-    let three: i32;
-
-    pub final fn new(one: i32, two: i32, three: i32) -> ClassC {
-        ClassC { class_b: ClassB::new(one, two), three: three }
-    }
-});
-
-class!(ClassD extends ClassC < ClassB < ClassA {
-    let four: i32;
-
-    override ClassC {
-        pub fn get_three(&self) -> &i32 {
-            &42
+    pub final fn new(name: String) -> Animal {
+        Animal {
+            name
         }
     }
 
-    override ClassA {
-        pub fn print_name(&self) -> () {
-            println!("Class D");
-        }
+    pub fn make_sound(&self) {
+        println!("No sound")
     }
 
-    pub final fn new(one: i32, two: i32, three: i32, four: i32) -> ClassD {
-        ClassD { class_c: ClassC::new(one, two, three), four }
+    pub fn get_name(&self) -> String {
+        // use `get_xxx_struct().xxx` to access a struct field from a public non-final method 
+        self.get_animal_struct().name.clone()
     }
 });
 
+// dog.rs
+use hierarchy::class;
+use crate::animal::{Animal, AnimalTrait};
+
+class!(pub Dog extends Animal {
+    pub final fn new(name: String) -> Dog {
+        Dog { animal: Animal::new(name) }
+    }
+
+    override Animal {
+        pub fn make_sound(&self) -> () {
+            println!("Wolf! Wolf!")
+        }
+    }
+
+    pub fn fetch(&self) -> () {
+        println!("{} is fetching a ball.", self.get_name());
+    }
+});
+
+// cat.rs
+use hierarchy::class;
+use crate::animal::{Animal, AnimalTrait};
+
+class!(pub Cat extends Animal {
+    pub final fn new(name: String) -> Cat {
+        Cat {
+            animal: Animal::new(name)
+        }
+    }
+
+    override Animal {
+        pub fn make_sound(&self) -> () {
+            println!("Meow!");
+        }
+    }
+
+    pub fn scratch(&self) -> () {
+        println!("{} is scratching.", self.get_name());
+    }
+});
+
+// main.rs
 fn main() {
-    let d = ClassD::new(1, 2, 3, 4);
-    println!("{}", d.get_one()); // 1
-    println!("{}", d.get_three()); // 42
-    d.print_name(); // Class D
+    let my_animal = Animal::new("Generic Animal".to_string());
+    let my_dog = Dog::new("Buddy".to_string());
+    let my_cat = Cat::new("Whiskers".to_string());
+
+    // Calling methods
+    my_animal.make_sound();     // No sound
+    my_dog.make_sound();        // Wolf! Wolf!
+    my_dog.fetch();             // Buddy is fetching a ball.
+    my_cat.make_sound();        // Meow!
+    my_cat.scratch();           // Whiskers is scratching.
+
+    // Demonstrating polymorphism
+    let mut animals: Vec<Box<dyn AnimalTrait>> = Vec::new();
+    animals.push(Box::new(Dog::new("Rex".to_string())));
+    animals.push(Box::new(Cat::new("Mittens".to_string())));
+
+    // Polymorphic calls
+    for animal in animals {
+        animal.make_sound();    // Output:
+                                // Wolf! Wolf!
+                                // Meow!
+    }
 }
+
 ```
