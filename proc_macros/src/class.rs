@@ -107,7 +107,7 @@ fn build_final_fns(fn_decls: &Vec<FnDecl>) -> proc_macro2::TokenStream {
             let params_output = build_params(params);
             output = quote!(
                 #output
-                #visibility fn #name (#params_output) -> #return_type #body
+                #visibility fn #name (#params_output) #return_type #body
             )
         }
     }
@@ -206,7 +206,7 @@ fn build_fns(fn_decls: &Vec<FnDecl>, require_pub: bool) -> proc_macro2::TokenStr
             let params_output = build_params(params);
             output = quote!(
                 #output
-                fn #name (#params_output) -> #return_type #body
+                fn #name (#params_output) #return_type #body
             )
         }
     }

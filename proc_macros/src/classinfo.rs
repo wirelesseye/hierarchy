@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use syn::{
-    braced, parenthesized,
-    parse::{Parse, ParseBuffer},
-    Block, FnArg, Ident, Token, Type, Visibility,
+    braced, parenthesized, parse::{Parse, ParseBuffer}, punctuated::Punctuated, Block, FnArg, Ident, ReturnType, Token, Type, TypeTuple, Visibility
 };
 
 pub struct Extend {
@@ -31,7 +29,7 @@ pub struct FnDecl {
     pub is_final: bool,
     pub name: Ident,
     pub params: Vec<FnArg>,
-    pub return_type: Type,
+    pub return_type: ReturnType,
     pub body: Block,
 }
 
@@ -127,8 +125,7 @@ fn parse_fn_decl(input: &ParseBuffer) -> syn::Result<FnDecl> {
     parenthesized!(params_content in input);
     let params = parse_params(&params_content)?;
 
-    input.parse::<Token![->]>()?;
-    let return_type: Type = input.parse()?;
+    let return_type: ReturnType = input.parse()?;
 
     let body: Block = input.parse()?;
 
