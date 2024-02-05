@@ -9,7 +9,7 @@ use hierarchy::class;
 class!(pub Animal {
     let name: String;
 
-    pub final fn new(name: String) -> Animal {
+    pub fn new(name: String) -> Animal {
         Animal {
             name
         }
@@ -20,7 +20,7 @@ class!(pub Animal {
     }
 
     pub fn get_name(&self) -> String {
-        // use `get_xxx_struct().xxx` to access a struct field from a public non-final method 
+        // use `get_xxx_struct().xxx` to access a struct field from a public non-static method 
         self.get_animal_struct().name.clone()
     }
 });
@@ -30,7 +30,7 @@ use hierarchy::class;
 use crate::animal::{Animal, AnimalTrait};
 
 class!(pub Dog extends Animal {
-    pub final fn new(name: String) -> Dog {
+    pub fn new(name: String) -> Dog {
         Dog { animal: Animal::new(name) }
     }
 
@@ -50,7 +50,7 @@ use hierarchy::class;
 use crate::animal::{Animal, AnimalTrait};
 
 class!(pub Cat extends Animal {
-    pub final fn new(name: String) -> Cat {
+    pub fn new(name: String) -> Cat {
         Cat {
             animal: Animal::new(name)
         }

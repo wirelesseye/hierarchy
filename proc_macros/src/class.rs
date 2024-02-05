@@ -80,39 +80,15 @@ fn build_impl(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         overrides: _,
     } = classinfo;
 
-    let fianl_fns = build_final_fns(fn_decls);
+    let fns = build_fns(fn_decls, true, |fn_decl| {
+        matches!(fn_decl.visibility, Visibility::Inherited) || fn_decl.is_static()
+    });
 
     quote!(
         impl #name {
-            #fianl_fns
+            #fns
         }
     )
-}
-
-fn build_final_fns(fn_decls: &Vec<FnDecl>) -> proc_macro2::TokenStream {
-    let mut output = quote!();
-
-    for fn_decl in fn_decls {
-        let FnDecl {
-            visibility,
-            is_final,
-            name,
-            params,
-            return_type,
-            body,
-        } = fn_decl;
-        if matches!(visibility, Visibility::Inherited)
-            || (matches!(visibility, Visibility::Public(_)) && *is_final)
-        {
-            let params_output = build_params(params);
-            output = quote!(
-                #output
-                #visibility fn #name (#params_output) #return_type #body
-            )
-        }
-    }
-
-    output
 }
 
 fn build_params(params: &Vec<FnArg>) -> proc_macro2::TokenStream {
@@ -144,13 +120,15 @@ fn build_trait(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     let trait_name = format_ident!("{}Trait", name);
     let get_struct_name = format_ident!("get_{}_struct", name_snake);
     let dependencies = build_trait_dependencies(extend);
-    let pub_fns = build_fns(fn_decls, true);
+    let fns = build_fns(fn_decls, false, |fn_decl| {
+        matches!(fn_decl.visibility, Visibility::Public(_)) && !fn_decl.is_static()
+    });
 
     quote!(
         #visibility trait #trait_name #dependencies {
             fn #get_struct_name(&self) -> &#name;
             fn get_super(&self) -> &dyn #trait_name;
-            #pub_fns
+            #fns
         }
 
         impl #trait_name for #name {
@@ -190,23 +168,24 @@ fn build_trait_dependencies(extend: &Option<Extend>) -> proc_macro2::TokenStream
     output
 }
 
-fn build_fns(fn_decls: &Vec<FnDecl>, require_pub: bool) -> proc_macro2::TokenStream {
+fn build_fns(fn_decls: &Vec<FnDecl>, include_visibility: bool, predicate: fn(&FnDecl) -> bool) -> proc_macro2::TokenStream {
     let mut output = quote!();
 
     for fn_decl in fn_decls {
         let FnDecl {
             visibility,
-            is_final,
             name,
             params,
             return_type,
             body,
         } = fn_decl;
-        if !require_pub || (matches!(visibility, Visibility::Public(_)) && !*is_final) {
+
+        let visibility = if include_visibility { quote!(#visibility) } else {quote!()};
+        if predicate(fn_decl) {
             let params_output = build_params(params);
             output = quote!(
                 #output
-                fn #name (#params_output) #return_type #body
+                #visibility fn #name (#params_output) #return_type #body
             )
         }
     }
@@ -246,7 +225,7 @@ fn build_extend(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         }
         
         let override_fns = if let Some(fn_decls) = overrides.get(extend_name) {
-            build_fns(fn_decls, false)
+            build_fns(fn_decls, false, |_| true)
         } else {
             quote!()
         };

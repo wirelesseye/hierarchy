@@ -26,11 +26,24 @@ pub struct ClassField {
 
 pub struct FnDecl {
     pub visibility: Visibility,
-    pub is_final: bool,
     pub name: Ident,
     pub params: Vec<FnArg>,
     pub return_type: ReturnType,
     pub body: Block,
+}
+
+impl FnDecl {
+    pub fn is_static(&self) -> bool {
+        if let Some(first) = self.params.first() {
+            if matches!(first, FnArg::Receiver(_)) {
+                false
+            } else {
+                true
+            }
+        } else {
+            true
+        }
+    }
 }
 
 impl Parse for ClassInfo {
@@ -112,12 +125,6 @@ fn parse_fn_decl(input: &ParseBuffer) -> syn::Result<FnDecl> {
         Visibility::Inherited
     };
 
-    let is_final = if input.peek(Token![final]) {
-        input.parse::<Token![final]>()?;
-        true
-    } else {
-        false
-    };
     input.parse::<Token![fn]>()?;
     let name: Ident = input.parse()?;
 
@@ -131,7 +138,6 @@ fn parse_fn_decl(input: &ParseBuffer) -> syn::Result<FnDecl> {
 
     Ok(FnDecl {
         visibility,
-        is_final,
         name,
         params,
         return_type,
