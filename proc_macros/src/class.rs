@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
@@ -12,12 +14,14 @@ pub fn class_impl(input: TokenStream) -> TokenStream {
     let impl_output = build_impl(&classinfo);
     let trait_output = build_trait(&classinfo);
     let extend_output = build_extend(&classinfo);
+    let impls_output = build_impls(&classinfo);
 
     let output = quote!(
         #struct_output
         #impl_output
         #trait_output
         #extend_output
+        #impls_output
     );
 
     output.into()
@@ -31,6 +35,7 @@ fn build_struct(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         fields,
         fn_decls: _,
         overrides: _,
+        impls: _,
     } = classinfo;
 
     let super_field = if let Some(extend) = extend {
@@ -78,6 +83,7 @@ fn build_impl(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         fields: _,
         fn_decls,
         overrides: _,
+        impls: _,
     } = classinfo;
 
     let fns = build_fns(fn_decls, true, |fn_decl| {
@@ -114,12 +120,13 @@ fn build_trait(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         fields: _,
         fn_decls,
         overrides: _,
+        impls,
     } = classinfo;
 
     let name_snake = to_snake_case(name);
     let trait_name = format_ident!("{}Trait", name);
     let get_struct_name = format_ident!("get_{}_struct", name_snake);
-    let dependencies = build_trait_dependencies(extend);
+    let dependencies = build_trait_dependencies(extend, impls);
     let fns = build_fns(fn_decls, false, |fn_decl| {
         matches!(fn_decl.visibility, Visibility::Public(_)) && !fn_decl.is_static()
     });
@@ -142,33 +149,45 @@ fn build_trait(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     )
 }
 
-fn build_trait_dependencies(extend: &Option<Extend>) -> proc_macro2::TokenStream {
-    if extend.is_none() {
-        return quote!();
-    }
-    let mut extend = extend.as_ref().unwrap();
+fn build_trait_dependencies(extend: &Option<Extend>, impls: &HashMap<Ident, Vec<FnDecl>>) -> proc_macro2::TokenStream {
     let mut output = quote!();
-
-    loop {
-        let super_trait_name = format_ident!("{}Trait", extend.name);
-
-        if output.is_empty() {
-            output = quote!(: #super_trait_name)
-        } else {
-            output = quote!(#output + #super_trait_name)
-        }
-
-        if (extend.extend.is_some()) {
-            extend = extend.extend.as_ref().unwrap();
-        } else {
-            break;
+    
+    if extend.is_some() {
+        let mut extend = extend.as_ref().unwrap();
+        
+        loop {
+            let super_trait_name = format_ident!("{}Trait", extend.name);
+    
+            if output.is_empty() {
+                output = quote!(: #super_trait_name)
+            } else {
+                output = quote!(#output + #super_trait_name)
+            }
+    
+            if (extend.extend.is_some()) {
+                extend = extend.extend.as_ref().unwrap();
+            } else {
+                break;
+            }
         }
     }
-    
+
+    for (impl_name, _) in impls {
+        if output.is_empty() {
+            output = quote!(: #impl_name)
+        } else {
+            output = quote!(#output + #impl_name)
+        }
+    }
+
     output
 }
 
-fn build_fns(fn_decls: &Vec<FnDecl>, include_visibility: bool, predicate: fn(&FnDecl) -> bool) -> proc_macro2::TokenStream {
+fn build_fns(
+    fn_decls: &Vec<FnDecl>,
+    include_visibility: bool,
+    predicate: fn(&FnDecl) -> bool,
+) -> proc_macro2::TokenStream {
     let mut output = quote!();
 
     for fn_decl in fn_decls {
@@ -180,7 +199,11 @@ fn build_fns(fn_decls: &Vec<FnDecl>, include_visibility: bool, predicate: fn(&Fn
             body,
         } = fn_decl;
 
-        let visibility = if include_visibility { quote!(#visibility) } else {quote!()};
+        let visibility = if include_visibility {
+            quote!(#visibility)
+        } else {
+            quote!()
+        };
         if predicate(fn_decl) {
             let params_output = build_params(params);
             output = quote!(
@@ -201,8 +224,9 @@ fn build_extend(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         fields: _,
         fn_decls: _,
         overrides,
+        impls: _,
     } = classinfo;
-    
+
     if extend.is_none() {
         return quote!();
     }
@@ -217,13 +241,13 @@ fn build_extend(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         let extend_snake_name = to_snake_case(extend_name);
         let get_extend_name = format_ident!("get_{}_struct", extend_snake_name);
         let extend_trait_name = format_ident!("{}Trait", extend_name);
-        
+
         if ref_chain.is_empty() {
             ref_chain = quote!(#extend_snake_name)
         } else {
             ref_chain = quote!(#ref_chain . #extend_snake_name)
         }
-        
+
         let override_fns = if let Some(fn_decls) = overrides.get(extend_name) {
             build_fns(fn_decls, false, |_| true)
         } else {
@@ -248,6 +272,31 @@ fn build_extend(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         } else {
             break;
         }
+    }
+
+    output
+}
+
+fn build_impls(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
+    let ClassInfo {
+        visibility,
+        name,
+        extend,
+        fields,
+        fn_decls,
+        overrides,
+        impls,
+    } = classinfo;
+    let mut output = quote!();
+
+    for (impl_name, fn_decls) in impls {
+        let fns = build_fns(fn_decls, false, |_| true);
+        output = quote!(
+            #output
+            impl #impl_name for #name {
+                #fns
+            }
+        );
     }
 
     output

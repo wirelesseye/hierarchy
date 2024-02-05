@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use syn::{
-    braced, parenthesized, parse::{Parse, ParseBuffer}, punctuated::Punctuated, Block, FnArg, Ident, ReturnType, Token, Type, TypeTuple, Visibility
+    braced, parenthesized, parse::{Parse, ParseBuffer}, Block, FnArg, Ident, ReturnType, Token, Type, TypeTuple, Visibility
 };
 
 pub struct Extend {
     pub name: Ident,
-    pub extend: Option<Box<Extend>>
+    pub extend: Option<Box<Extend>>,
 }
 
 pub struct ClassInfo {
@@ -16,6 +16,7 @@ pub struct ClassInfo {
     pub fields: Vec<ClassField>,
     pub fn_decls: Vec<FnDecl>,
     pub overrides: HashMap<Ident, Vec<FnDecl>>,
+    pub impls: HashMap<Ident, Vec<FnDecl>>,
 }
 
 pub struct ClassField {
@@ -69,6 +70,7 @@ impl Parse for ClassInfo {
         let mut fields: Vec<ClassField> = Vec::new();
         let mut fn_decls: Vec<FnDecl> = Vec::new();
         let mut overrides: HashMap<Ident, Vec<FnDecl>> = HashMap::new();
+        let mut impls: HashMap<Ident, Vec<FnDecl>> = HashMap::new();
 
         while !class_content.is_empty() {
             if class_content.peek(Token![override]) {
@@ -76,8 +78,15 @@ impl Parse for ClassInfo {
                 let name: Ident = class_content.parse()?;
                 let override_content;
                 braced!(override_content in class_content);
-                let fn_decls = parse_override_fns(&override_content)?;
+                let fn_decls = parse_fns(&override_content)?;
                 overrides.entry(name).or_insert(Vec::new()).extend(fn_decls);
+            } else if class_content.peek(Token![impl]) {
+                class_content.parse::<Token![impl]>()?;
+                let name: Ident = class_content.parse()?;
+                let impl_content;
+                braced!(impl_content in class_content);
+                let fn_decls = parse_fns(&impl_content)?;
+                impls.entry(name).or_insert(Vec::new()).extend(fn_decls);
             } else if class_content.peek(Token![pub]) {
                 if class_content.peek2(Token![let]) {
                     fields.push(parse_field(&class_content)?);
@@ -98,6 +107,7 @@ impl Parse for ClassInfo {
             fields,
             fn_decls,
             overrides,
+            impls,
         })
     }
 }
@@ -159,7 +169,7 @@ fn parse_params(input: &ParseBuffer) -> syn::Result<Vec<FnArg>> {
     Ok(params)
 }
 
-fn parse_override_fns(input: &ParseBuffer) -> syn::Result<Vec<FnDecl>> {
+fn parse_fns(input: &ParseBuffer) -> syn::Result<Vec<FnDecl>> {
     let mut fn_decls = Vec::new();
     while !input.is_empty() {
         fn_decls.push(parse_fn_decl(input)?)
@@ -178,6 +188,6 @@ fn parse_extend(input: &ParseBuffer) -> syn::Result<Extend> {
 
     Ok(Extend {
         name,
-        extend
+        extend,
     })
 }
