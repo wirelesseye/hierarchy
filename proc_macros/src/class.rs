@@ -10,9 +10,9 @@ use crate::classinfo::{ClassField, ClassInfo, Extend, FnDecl};
 pub fn class_impl(input: TokenStream) -> TokenStream {
     let classinfo = parse_macro_input!(input as ClassInfo);
 
-    let struct_output = build_struct(&classinfo);
-    let impl_output = build_impl(&classinfo);
-    let trait_output = build_trait(&classinfo);
+    let struct_output = build_class_struct(&classinfo);
+    let impl_output = build_class_impl(&classinfo);
+    let trait_output = build_class_trait(&classinfo);
     let extend_output = build_extend(&classinfo);
     let impls_output = build_impls(&classinfo);
 
@@ -27,9 +27,10 @@ pub fn class_impl(input: TokenStream) -> TokenStream {
     output.into()
 }
 
-fn build_struct(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
+fn build_class_struct(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     let ClassInfo {
         visibility,
+        is_final: _,
         name,
         extend,
         fields,
@@ -47,7 +48,7 @@ fn build_struct(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     } else {
         quote!()
     };
-    let fields = build_fields(fields);
+    let fields = build_class_fields(fields);
 
     quote!(
         #visibility struct #name {
@@ -57,7 +58,7 @@ fn build_struct(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     )
 }
 
-fn build_fields(fields: &Vec<ClassField>) -> proc_macro2::TokenStream {
+fn build_class_fields(fields: &Vec<ClassField>) -> proc_macro2::TokenStream {
     let mut output = quote!();
 
     for ClassField {
@@ -75,9 +76,10 @@ fn build_fields(fields: &Vec<ClassField>) -> proc_macro2::TokenStream {
     output.into()
 }
 
-fn build_impl(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
+fn build_class_impl(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     let ClassInfo {
         visibility: _,
+        is_final,
         name,
         extend: _,
         fields: _,
@@ -86,9 +88,15 @@ fn build_impl(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         impls: _,
     } = classinfo;
 
-    let fns = build_fns(fn_decls, true, |fn_decl| {
-        matches!(fn_decl.visibility, Visibility::Inherited) || fn_decl.is_static()
-    });
+    let fns = build_fns(
+        fn_decls,
+        true,
+        if *is_final {
+            |_| true
+        } else {
+            |fn_decl| matches!(fn_decl.visibility, Visibility::Inherited) || fn_decl.is_static()
+        },
+    );
 
     quote!(
         impl #name {
@@ -112,9 +120,10 @@ fn build_params(params: &Vec<FnArg>) -> proc_macro2::TokenStream {
     output
 }
 
-fn build_trait(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
+fn build_class_trait(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     let ClassInfo {
         visibility,
+        is_final,
         name,
         extend,
         fields: _,
@@ -122,6 +131,10 @@ fn build_trait(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
         overrides: _,
         impls,
     } = classinfo;
+
+    if *is_final {
+        return quote!();
+    }
 
     let name_snake = to_snake_case(name);
     let trait_name = format_ident!("{}Trait", name);
@@ -149,22 +162,25 @@ fn build_trait(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     )
 }
 
-fn build_trait_dependencies(extend: &Option<Extend>, impls: &HashMap<Ident, Vec<FnDecl>>) -> proc_macro2::TokenStream {
+fn build_trait_dependencies(
+    extend: &Option<Extend>,
+    impls: &HashMap<Ident, Vec<FnDecl>>,
+) -> proc_macro2::TokenStream {
     let mut output = quote!();
-    
+
     if extend.is_some() {
         let mut extend = extend.as_ref().unwrap();
-        
+
         loop {
             let super_trait_name = format_ident!("{}Trait", extend.name);
-    
+
             if output.is_empty() {
                 output = quote!(: #super_trait_name)
             } else {
                 output = quote!(#output + #super_trait_name)
             }
-    
-            if (extend.extend.is_some()) {
+
+            if extend.extend.is_some() {
                 extend = extend.extend.as_ref().unwrap();
             } else {
                 break;
@@ -219,6 +235,7 @@ fn build_fns(
 fn build_extend(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     let ClassInfo {
         visibility: _,
+        is_final: _,
         name,
         extend,
         fields: _,
@@ -279,12 +296,13 @@ fn build_extend(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
 
 fn build_impls(classinfo: &ClassInfo) -> proc_macro2::TokenStream {
     let ClassInfo {
-        visibility,
+        visibility: _,
+        is_final: _,
         name,
-        extend,
-        fields,
-        fn_decls,
-        overrides,
+        extend: _,
+        fields: _,
+        fn_decls: _,
+        overrides: _,
         impls,
     } = classinfo;
     let mut output = quote!();

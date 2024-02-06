@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use syn::{
-    braced, parenthesized, parse::{Parse, ParseBuffer}, Block, FnArg, Ident, ReturnType, Token, Type, TypeTuple, Visibility
+    braced, parenthesized, parse::{Parse, ParseBuffer}, Block, FnArg, Ident, ReturnType, Token, Type, Visibility
 };
 
 pub struct Extend {
@@ -11,6 +11,7 @@ pub struct Extend {
 
 pub struct ClassInfo {
     pub visibility: Visibility,
+    pub is_final: bool,
     pub name: Ident,
     pub extend: Option<Extend>,
     pub fields: Vec<ClassField>,
@@ -50,6 +51,12 @@ impl FnDecl {
 impl Parse for ClassInfo {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let visibility: Visibility = input.parse()?;
+        let is_final = if input.peek(Token![final]) {
+            input.parse::<Token![final]>()?;
+            true
+        } else {
+            false
+        };
         let name: Ident = input.parse()?;
 
         let extend = if input.peek(syn::Ident) {
@@ -102,6 +109,7 @@ impl Parse for ClassInfo {
 
         Ok(ClassInfo {
             visibility,
+            is_final,
             name,
             extend,
             fields,
